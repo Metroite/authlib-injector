@@ -29,6 +29,7 @@ import static moe.yushi.authlibinjector.util.JsonUtils.asJsonObject;
 import static moe.yushi.authlibinjector.util.JsonUtils.parseJson;
 import java.io.UncheckedIOException;
 import java.security.PublicKey;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -59,23 +60,30 @@ public class APIMetadata {
 						.map(it -> (Map<String, Object>) new TreeMap<>(asJsonObject(it)))
 						.orElse(emptyMap());
 
-		return new APIMetadata(apiRoot, unmodifiableList(skinDomains), unmodifiableMap(meta), decodedPublickey);
+		String[] apiRoots;
+		if (apiRoot.contains(",")) {
+			apiRoots = apiRoot.split(",");
+		} else {
+			apiRoots = new String[] {apiRoot};
+		}
+		
+		return new APIMetadata(unmodifiableList(skinDomains), unmodifiableMap(meta), decodedPublickey, apiRoots);
 	}
 
-	private String apiRoot;
+	private String[] apiRoots;
 	private List<String> skinDomains;
 	private Optional<PublicKey> decodedPublickey;
 	private Map<String, Object> meta;
 
-	public APIMetadata(String apiRoot, List<String> skinDomains, Map<String, Object> meta, Optional<PublicKey> decodedPublickey) {
-		this.apiRoot = requireNonNull(apiRoot);
+	public APIMetadata(List<String> skinDomains, Map<String, Object> meta, Optional<PublicKey> decodedPublickey, String... apiRoots) {
+		this.apiRoots = requireNonNull(apiRoots);
 		this.skinDomains = requireNonNull(skinDomains);
 		this.meta = requireNonNull(meta);
 		this.decodedPublickey = requireNonNull(decodedPublickey);
 	}
 
-	public String getApiRoot() {
-		return apiRoot;
+	public String[] getApiRoots() {
+		return apiRoots;
 	}
 
 	public List<String> getSkinDomains() {
@@ -92,6 +100,6 @@ public class APIMetadata {
 
 	@Override
 	public String toString() {
-		return format("APIMetadata [apiRoot={0}, skinDomains={1}, decodedPublickey={2}, meta={3}]", apiRoot, skinDomains, decodedPublickey, meta);
+		return format("APIMetadata [apiRoot={0}, skinDomains={1}, decodedPublickey={2}, meta={3}]", Arrays.toString(apiRoots), skinDomains, decodedPublickey, meta);
 	}
 }

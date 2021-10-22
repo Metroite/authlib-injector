@@ -17,15 +17,17 @@
 package moe.yushi.authlibinjector.yggdrasil;
 
 import static moe.yushi.authlibinjector.util.UUIDUtils.toUnsignedUUID;
+
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
 import java.util.UUID;
-import moe.yushi.authlibinjector.APIMetadata;
 
 public class CustomYggdrasilAPIProvider implements YggdrasilAPIProvider {
 
 	private String apiRoot;
 
-	public CustomYggdrasilAPIProvider(APIMetadata configuration) {
-		this.apiRoot = configuration.getApiRoot();
+	public CustomYggdrasilAPIProvider(String root) {
+		this.apiRoot = root;
 	}
 
 	@Override
@@ -36,6 +38,15 @@ public class CustomYggdrasilAPIProvider implements YggdrasilAPIProvider {
 	@Override
 	public String queryProfile(UUID uuid) {
 		return apiRoot + "sessionserver/session/minecraft/profile/" + toUnsignedUUID(uuid);
+	}
+	
+	@Override
+	public String hasJoined(String username, String serverId) {
+		try {
+			return apiRoot + "sessionserver/session/minecraft/hasJoined?username="+URLEncoder.encode(username, "UTF-8")+"&serverId="+URLEncoder.encode(serverId, "UTF-8");
+		} catch (UnsupportedEncodingException e) {
+			throw new AssertionError(e);
+		}
 	}
 
 	@Override

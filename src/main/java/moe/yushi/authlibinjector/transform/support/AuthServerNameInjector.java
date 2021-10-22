@@ -28,7 +28,7 @@ public final class AuthServerNameInjector {
 		if (serverName instanceof String) {
 			return (String) serverName;
 		} else {
-			return meta.getApiRoot();
+			return meta.getApiRoots()[0];
 		}
 	}
 
