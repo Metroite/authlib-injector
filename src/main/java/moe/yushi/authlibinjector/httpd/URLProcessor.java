@@ -152,11 +152,16 @@ public class URLProcessor {
 						}
 					}
 
+					String original = protocol + "://" + domain + path;
 					String target = redirector.redirect(domain, path)
-							.orElseGet(() -> protocol + "://" + domain + path);
+							.orElse(original);
 					try {
-						return reverseProxy(session, target);
-					} catch (IOException e) {
+						try {
+							return reverseProxy(session, target, true);
+						} catch (InvalidSessionException e) {
+							return reverseProxy(session, original, false);
+						}
+					} catch (IOException | InvalidSessionException e) { // InvalidSessionException will never throw here
 						log(WARNING, "Reverse proxy error", e);
 						return Response.newFixedLength(Status.BAD_GATEWAY, CONTENT_TYPE_TEXT, "Bad Gateway");
 					}
@@ -171,7 +176,7 @@ public class URLProcessor {
 	private static final Set<String> ignoredHeaders = new HashSet<>(Arrays.asList("host", "expect", "connection", "keep-alive", "transfer-encoding"));
 
 	@SuppressWarnings("resource")
-	private Response reverseProxy(IHTTPSession session, String upstream) throws IOException {
+	private Response reverseProxy(IHTTPSession session, String upstream, boolean tryAgain) throws IOException, InvalidSessionException {
 		String method = session.getMethod();
 
 		String url = session.getQueryParameterString() == null ? upstream : upstream + "?" + session.getQueryParameterString();
@@ -195,7 +200,8 @@ public class URLProcessor {
 		}
 
 		int responseCode = conn.getResponseCode();
-		String reponseMessage = conn.getResponseMessage();
+		String responseMessage = conn.getResponseMessage();
+		if (tryAgain && responseCode == 401) throw new InvalidSessionException(responseMessage);
 		Map<String, List<String>> responseHeaders = new LinkedHashMap<>();
 		conn.getHeaderFields().forEach((name, values) -> {
 			if (name != null && !ignoredHeaders.contains(name.toLowerCase())) {
@@ -208,7 +214,7 @@ public class URLProcessor {
 		} catch (IOException e) {
 			upstreamIn = conn.getErrorStream();
 		}
-		log(DEBUG, "Reverse proxy: < " + responseCode + " " + reponseMessage + " , headers: " + responseHeaders);
+		log(DEBUG, "Reverse proxy: < " + responseCode + " " + responseMessage + " , headers: " + responseHeaders);
 
 		IStatus status = new IStatus() {
 			@Override
@@ -218,7 +224,7 @@ public class URLProcessor {
 
 			@Override
 			public String getDescription() {
-				return responseCode + " " + reponseMessage;
+				return responseCode + " " + responseMessage;
 			}
 		};
 
