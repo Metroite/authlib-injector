@@ -47,7 +47,6 @@ import moe.yushi.authlibinjector.httpd.DefaultURLRedirector;
 import moe.yushi.authlibinjector.httpd.LegacySkinAPIFilter;
 import moe.yushi.authlibinjector.httpd.ProfileKeyFilter;
 import moe.yushi.authlibinjector.httpd.MultiAuthFilter;
-import moe.yushi.authlibinjector.httpd.PrivilegesFilter;
 import moe.yushi.authlibinjector.httpd.URLFilter;
 import moe.yushi.authlibinjector.httpd.URLProcessor;
 import moe.yushi.authlibinjector.transform.ClassTransformer;
