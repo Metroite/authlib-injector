@@ -28,10 +28,12 @@ import static moe.yushi.authlibinjector.util.JsonUtils.asJsonString;
 import static moe.yushi.authlibinjector.util.JsonUtils.parseJson;
 import static moe.yushi.authlibinjector.util.Logging.log;
 import static moe.yushi.authlibinjector.util.Logging.Level.DEBUG;
+import static moe.yushi.authlibinjector.util.Logging.Level.WARNING;
 import static moe.yushi.authlibinjector.util.UUIDUtils.fromUnsignedUUID;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.Proxy;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -43,35 +45,45 @@ import moe.yushi.authlibinjector.yggdrasil.GameProfile.PropertyValue;
 
 public class YggdrasilClient {
 
-	private YggdrasilAPIProvider apiProvider;
+	private YggdrasilAPIProvider[] apiProviders;
 	private Proxy proxy;
 
-	public YggdrasilClient(YggdrasilAPIProvider apiProvider) {
-		this(apiProvider, null);
+	public YggdrasilClient(YggdrasilAPIProvider... apiProviders) {
+		this(null, apiProviders);
 	}
 
-	public YggdrasilClient(YggdrasilAPIProvider apiProvider, Proxy proxy) {
-		this.apiProvider = apiProvider;
+	public YggdrasilClient(Proxy proxy, YggdrasilAPIProvider... apiProviders) {
+		this.apiProviders = apiProviders;
 		this.proxy = proxy;
 	}
 
 	public Map<String, UUID> queryUUIDs(Set<String> names) throws UncheckedIOException {
-		String responseText;
-		try {
-			responseText = asString(http("POST", apiProvider.queryUUIDsByNames(),
-					JSONArray.toJSONString(names).getBytes(UTF_8), CONTENT_TYPE_JSON,
-					proxy));
-		} catch (IOException e) {
-			throw new UncheckedIOException(e);
-		}
-		log(DEBUG, "Query UUIDs of " + names + " at [" + apiProvider + "], response: " + responseText);
-
+		names = new HashSet<>(names);
 		Map<String, UUID> result = new LinkedHashMap<>();
-		for (Object rawProfile : asJsonArray(parseJson(responseText))) {
-			JSONObject profile = asJsonObject(rawProfile);
-			result.put(
-					asJsonString(profile.get("name")),
-					parseUnsignedUUID(asJsonString(profile.get("id"))));
+		for (YggdrasilAPIProvider apiProvider : apiProviders) {
+			String responseText;
+			try {
+				responseText = asString(http("POST", apiProvider.queryUUIDsByNames(),
+						JSONArray.toJSONString(names).getBytes(UTF_8), CONTENT_TYPE_JSON,
+						proxy));
+			} catch (IOException e) {
+				log(WARNING, "Query UUIDs of " + names + " at [" + apiProvider + "], failed: " + e);
+				continue;
+			}
+			log(DEBUG, "Query UUIDs of " + names + " at [" + apiProvider + "], response: " + responseText);
+			if (responseText.isEmpty()) continue;
+	
+			for (Object rawProfile : asJsonArray(parseJson(responseText))) {
+				try {
+					JSONObject profile = asJsonObject(rawProfile);
+					String name = asJsonString(profile.get("name"));
+					result.put(name,
+							parseUnsignedUUID(asJsonString(profile.get("id"))));
+					names.remove(name);
+				} catch (UncheckedIOException e) {
+					continue;
+				}
+			}
 		}
 		return result;
 	}
@@ -81,23 +93,52 @@ public class YggdrasilClient {
 	}
 
 	public Optional<GameProfile> queryProfile(UUID uuid, boolean withSignature) throws UncheckedIOException {
-		String url = apiProvider.queryProfile(uuid);
-		if (withSignature) {
-			url += "?unsigned=false";
+		for (YggdrasilAPIProvider apiProvider : apiProviders) {
+			String url = apiProvider.queryProfile(uuid);
+			if (withSignature) {
+				url += "?unsigned=false";
+			}
+			String responseText;
+			try {
+				responseText = asString(http("GET", url, proxy));
+			} catch (IOException e) {
+				log(WARNING, "Query profile of [" + uuid + "] at [" + apiProvider + "], failed: "+e);
+				continue;
+			}
+			if (responseText.isEmpty()) {
+				log(DEBUG, "Query profile of [" + uuid + "] at [" + apiProvider + "], not found");
+				continue;
+			}
+			log(DEBUG, "Query profile of [" + uuid + "] at [" + apiProvider + "], response: " + responseText);
+	
+			try {
+				return Optional.of(parseGameProfile(asJsonObject(parseJson(responseText))));
+			} catch (UncheckedIOException e) {
+				continue;
+			}
 		}
-		String responseText;
-		try {
-			responseText = asString(http("GET", url, proxy));
-		} catch (IOException e) {
-			throw new UncheckedIOException(e);
+		return Optional.empty();
+	}
+	
+	public Optional<GameProfile> hasJoined(String username, String serverId) {
+		for (YggdrasilAPIProvider apiProvider : apiProviders) {
+			String url = apiProvider.hasJoined(username, serverId);
+			String responseText;
+			try {
+				responseText = asString(http("GET", url, proxy));
+			} catch (IOException e) {
+				log(WARNING, "Has joined of [" + username + " " + serverId + "] at [" + apiProvider + "], failed: "+e);
+				continue;
+			}
+			log(DEBUG, "Has joined of [" + username + " " + serverId + "] at [" + apiProvider + "], response: "+responseText);
+	
+			try {
+				return Optional.of(parseGameProfile(asJsonObject(parseJson(responseText))));
+			} catch (UncheckedIOException e) {
+				continue;
+			}
 		}
-		if (responseText.isEmpty()) {
-			log(DEBUG, "Query profile of [" + uuid + "] at [" + apiProvider + "], not found");
-			return Optional.empty();
-		}
-		log(DEBUG, "Query profile of [" + uuid + "] at [" + apiProvider + "], response: " + responseText);
-
-		return Optional.of(parseGameProfile(asJsonObject(parseJson(responseText))));
+		return Optional.empty();
 	}
 
 	private GameProfile parseGameProfile(JSONObject json) {

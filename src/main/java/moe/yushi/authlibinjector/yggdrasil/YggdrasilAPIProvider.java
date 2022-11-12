@@ -21,4 +21,5 @@ import java.util.UUID;
 public interface YggdrasilAPIProvider {
 	String queryUUIDsByNames();
 	String queryProfile(UUID uuid);
+	String hasJoined(String username, String serverId);
 }
