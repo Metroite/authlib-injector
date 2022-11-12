@@ -24,12 +24,12 @@ import moe.yushi.authlibinjector.APIMetadata;
 public class DefaultURLRedirector implements URLRedirector {
 
 	private Map<String, String> domainMapping = new HashMap<>();
-	private String apiRoot;
+	private String[] apiRoots;
 
 	public DefaultURLRedirector(APIMetadata config) {
 		initDomainMapping();
 
-		apiRoot = config.getApiRoot();
+		apiRoots = config.getApiRoots();
 	}
 
 	private void initDomainMapping() {
@@ -47,7 +47,7 @@ public class DefaultURLRedirector implements URLRedirector {
 			return Optional.empty();
 		}
 
-		return Optional.of(apiRoot + subdirectory + path);
+		return Optional.of(apiRoots[0] + subdirectory + path);
 	}
 
 }

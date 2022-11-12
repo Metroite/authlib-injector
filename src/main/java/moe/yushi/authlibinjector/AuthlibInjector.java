@@ -46,8 +46,8 @@ import moe.yushi.authlibinjector.httpd.AntiFeaturesFilter;
 import moe.yushi.authlibinjector.httpd.DefaultURLRedirector;
 import moe.yushi.authlibinjector.httpd.LegacySkinAPIFilter;
 import moe.yushi.authlibinjector.httpd.ProfileKeyFilter;
-import moe.yushi.authlibinjector.httpd.QueryProfileFilter;
-import moe.yushi.authlibinjector.httpd.QueryUUIDsFilter;
+import moe.yushi.authlibinjector.httpd.MultiAuthFilter;
+import moe.yushi.authlibinjector.httpd.PrivilegesFilter;
 import moe.yushi.authlibinjector.httpd.URLFilter;
 import moe.yushi.authlibinjector.httpd.URLProcessor;
 import moe.yushi.authlibinjector.transform.ClassTransformer;
@@ -70,6 +70,7 @@ import moe.yushi.authlibinjector.transform.support.VelocityProfileKeyTransformUn
 import moe.yushi.authlibinjector.transform.support.YggdrasilKeyTransformUnit;
 import moe.yushi.authlibinjector.yggdrasil.CustomYggdrasilAPIProvider;
 import moe.yushi.authlibinjector.yggdrasil.MojangYggdrasilAPIProvider;
+import moe.yushi.authlibinjector.yggdrasil.YggdrasilAPIProvider;
 import moe.yushi.authlibinjector.yggdrasil.YggdrasilClient;
 
 public final class AuthlibInjector {
@@ -229,23 +230,27 @@ public final class AuthlibInjector {
 
 		List<URLFilter> filters = new ArrayList<>();
 
-		YggdrasilClient customClient = new YggdrasilClient(new CustomYggdrasilAPIProvider(config));
-		YggdrasilClient mojangClient = new YggdrasilClient(new MojangYggdrasilAPIProvider(), Config.mojangProxy);
+		YggdrasilAPIProvider[] providers = new YggdrasilAPIProvider[config.getApiRoots().length+1];
+		for (int i = 0; i < config.getApiRoots().length; i++) {
+			providers[i] = new CustomYggdrasilAPIProvider(config.getApiRoots()[i]);
+		}
+		providers[providers.length-1] = new MojangYggdrasilAPIProvider();
+		YggdrasilClient client = new YggdrasilClient(providers);
 
 		boolean legacySkinPolyfillDefault = !Boolean.TRUE.equals(config.getMeta().get("feature.legacy_skin_api"));
 		if (Config.legacySkinPolyfill.isEnabled(legacySkinPolyfillDefault)) {
-			filters.add(new LegacySkinAPIFilter(customClient));
+			filters.add(new LegacySkinAPIFilter(client));
 		} else {
 			log(INFO, "Disabled legacy skin API polyfill");
 		}
 
-		boolean mojangNamespaceDefault = !Boolean.TRUE.equals(config.getMeta().get("feature.no_mojang_namespace"));
-		if (Config.mojangNamespace.isEnabled(mojangNamespaceDefault)) {
-			filters.add(new QueryUUIDsFilter(mojangClient, customClient));
-			filters.add(new QueryProfileFilter(mojangClient, customClient));
-		} else {
-			log(INFO, "Disabled Mojang namespace");
-		}
+//		boolean mojangNamespaceDefault = !Boolean.TRUE.equals(config.getMeta().get("feature.no_mojang_namespace"));
+//		if (Config.mojangNamespace.isEnabled(mojangNamespaceDefault)) {
+//			filters.add(new QueryUUIDsFilter(mojangClient, client));
+//			filters.add(new QueryProfileFilter(mojangClient, client));
+//		} else {
+//			log(INFO, "Disabled Mojang namespace");
+//		}
 
 		boolean mojangAntiFeaturesDefault = Boolean.TRUE.equals(config.getMeta().get("feature.enable_mojang_anti_features"));
 		if (!Config.mojangAntiFeatures.isEnabled(mojangAntiFeaturesDefault)) {
@@ -255,6 +260,11 @@ public final class AuthlibInjector {
 		boolean profileKeyDefault = Boolean.TRUE.equals(config.getMeta().get("feature.enable_profile_key"));
 		if (!Config.profileKey.isEnabled(profileKeyDefault)) {
 			filters.add(new ProfileKeyFilter());
+		}
+		
+		if (providers.length > 1) {
+			log(INFO, "Intercept auth for multiple servers");
+			filters.add(new MultiAuthFilter(client));
 		}
 
 		return filters;
